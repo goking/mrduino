@@ -17,6 +17,9 @@
 GPIO_InitTypeDef  GPIO_InitStructure;
 
 /* Private define ------------------------------------------------------------*/
+
+#define USERBUTTON GPIOA, GPIO_Pin_0
+
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
 /* Private function prototypes -----------------------------------------------*/
@@ -24,23 +27,20 @@ GPIO_InitTypeDef  GPIO_InitStructure;
 int write_handler(char c);
 void Delay(__IO uint32_t nCount);
 extern void rbmain(mrb_state *mrb);
+void initialize_basic_periph();
 
 /* Private functions ---------------------------------------------------------*/
 
 /**
-  * @brief  Main program
+  * Main program
   * @param  None
   * @retval None
   */
 int main(void)
 {
-  initialise_monitor_handles();
-  /*!< At this stage the microcontroller clock setting is already configured, 
-       this is done through SystemInit() function which is called from startup
-       file (startup_stm32f4xx.s) before to branch to application main.
-       To reconfigure the default setting of SystemInit() function, refer to
-        system_stm32f4xx.c file
-     */
+  initialize_basic_periph();
+  
+  uint8_t monitor_mode = GPIO_ReadInputDataBit(USERBUTTON);
 
   /* GPIOD Periph clock enable */
   RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOD, ENABLE);
@@ -53,44 +53,31 @@ int main(void)
   GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
   GPIO_Init(GPIOD, &GPIO_InitStructure);
 
-  int i = 0;
-  while (1)
-  {
-    /* PD12 to be toggled */
-    GPIO_SetBits(GPIOD, GPIO_Pin_12);
+  if (monitor_mode == Bit_SET) {
+    puts("monitor mode¥n");
+    while (!USART_GetFlagStatus(USART1, USART_FLAG_RXNE));
+    char data = USART_ReceiveData(USART2);
+    write_handler(data);
+  } else {
+    puts("execute mode¥n");
+    while (1) {
+      GPIO_SetBits(GPIOD, GPIO_Pin_14);
+      Delay(0xFFFFFF);          
+      GPIO_SetBits(GPIOD, GPIO_Pin_15);
+      Delay(0xFFFFFF);
+      GPIO_ResetBits(GPIOD, GPIO_Pin_12|GPIO_Pin_13|GPIO_Pin_14|GPIO_Pin_15);
+      Delay(0xFFFFFF);
+    }
+  }
     
-    /* Insert delay */
-    //Delay(0x3FFFFF);
-    
-    /* PD13 to be toggled */
-    GPIO_SetBits(GPIOD, GPIO_Pin_13);
-    
-    /* Insert delay */
-    Delay(0xFFFFFF);
-  
+/* Insert delay */
+/*  
     mrb_state* mrb = mrb_open();
     rbmain(mrb);
     mrb_close(mrb);
-  
-    /* PD14 to be toggled */
-    GPIO_SetBits(GPIOD, GPIO_Pin_14);
-    
-    /* Insert delay */
-    //Delay(0x3FFFFF);
-    
-    /* PD15 to be toggled */
-    GPIO_SetBits(GPIOD, GPIO_Pin_15);
-    
-    /* Insert delay */
-    Delay(0xFFFFFF);
-    
-    GPIO_ResetBits(GPIOD, GPIO_Pin_12|GPIO_Pin_13|GPIO_Pin_14|GPIO_Pin_15);
-    
-    /* Insert delay */
-    Delay(0xFFFFFF);
-
     printf("count: %3d\r\n", ++i);
-  }
+*/  
+
 }
 
 /**
@@ -135,27 +122,16 @@ void assert_failed(uint8_t* file, uint32_t line)
   */ 
 
 void
-initialise_monitor_handles (void)
+initialize_basic_periph (void)
 {
-  /* Open the standard file descriptors by opening the special
-   * teletype device, ":tt", read-only to obtain a descritpor for
-   * standard input and write-only to obtain a descriptor for standard
-   * output. Finally, open ":tt" in append mode to obtain a descriptor
-   * for standard error. Since this is a write mode, most kernels will
-   * probably return the same value as for standard output, but the
-   * kernel can differentiate the two using the mode flag and return a
-   * different descriptor for standard error.
-   */
+  /* STDOUT & STDERR */
 
   //GPIOAとUSART2にクロック供給
   RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
   RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, ENABLE);
 
-  //GPIO初期化用構造体を作る
-  GPIO_InitTypeDef GPIO_InitStructure;
-
   //GPIOAのPIN2を出力に設定
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2 ;
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_2;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
   GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
   GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
@@ -164,6 +140,17 @@ initialise_monitor_handles (void)
 
   //GPIOAのPIN2をオルタネィテブファンクションのUSART2に割り当て
   GPIO_PinAFConfig(GPIOA , GPIO_PinSource2 , GPIO_AF_USART2);
+
+  //GPIOAのPIN3を出力に設定
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_3;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF;
+  GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+  //GPIOAのPIN3をオルタネィテブファンクションのUSART2に割り当て
+  GPIO_PinAFConfig(GPIOA , GPIO_PinSource3 , GPIO_AF_USART2);
 
   //USART初期化用構造体を作る
   USART_InitTypeDef USART_InitStructure;
@@ -180,10 +167,23 @@ initialise_monitor_handles (void)
   //USART2を有効化
   USART_Cmd(USART2, ENABLE);
 
-  SYSCALL_Init_STDOUT_Handler(write_handler);
+  SYSCALL_Init_STDOUT_Handler(&write_handler);
   SYSCALL_Init_STDERR_Handler(&write_handler);
   //SYSCALL_Init_STDIN_Handler(SYSREADHANDLER handler);
+
+  /* USERBUTTON */
+
+  //USERBUTTON(GPIOAのPIN0の設定)
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
+  GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_DOWN;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+
 }
+
+
 
 int
 write_handler(char c) {
