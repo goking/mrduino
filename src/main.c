@@ -54,12 +54,18 @@ int main(void)
   GPIO_Init(GPIOD, &GPIO_InitStructure);
 
   if (monitor_mode == Bit_SET) {
-    puts("monitor mode¥n");
-    while (!USART_GetFlagStatus(USART1, USART_FLAG_RXNE));
-    char data = USART_ReceiveData(USART2);
-    write_handler(data);
+    puts("monitor mode");
+    while (1) {
+      while (!USART_GetFlagStatus(USART2, USART_FLAG_RXNE));
+      uint16_t data = USART_ReceiveData(USART2);
+      if (data == 0xF1) {
+        puts("OK");
+      } else {
+        puts("ERR");
+      }
+    }
   } else {
-    puts("execute mode¥n");
+    puts("execute mode");
     while (1) {
       GPIO_SetBits(GPIOD, GPIO_Pin_14);
       Delay(0xFFFFFF);          
@@ -67,16 +73,14 @@ int main(void)
       Delay(0xFFFFFF);
       GPIO_ResetBits(GPIOD, GPIO_Pin_12|GPIO_Pin_13|GPIO_Pin_14|GPIO_Pin_15);
       Delay(0xFFFFFF);
+      /*  
+          mrb_state* mrb = mrb_open();
+          rbmain(mrb);
+          mrb_close(mrb);
+      */  
     }
   }
     
-/* Insert delay */
-/*  
-    mrb_state* mrb = mrb_open();
-    rbmain(mrb);
-    mrb_close(mrb);
-    printf("count: %3d\r\n", ++i);
-*/  
 
 }
 
