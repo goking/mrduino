@@ -17,9 +17,8 @@ OBJCOPY=arm-none-eabi-objcopy
 
 LIBRARY_PATH = `which $(CC)`
 
-MRB_LIB_PATH = `which $(MRBC)`/../../lib
-MRB_INC_PATH = `which $(MRBC)`/../../include
-
+MRB_LIB_PATH = $(MRB_HOME)/build/stm32f4x/mrblib
+MRB_INC_PATH = $(MRB_HOME)/include
 
 CFLAGS  = -g -O2 -Wall -Tstm32_flash.ld 
 CFLAGS += -mlittle-endian -mthumb -mcpu=cortex-m4 -mthumb-interwork
