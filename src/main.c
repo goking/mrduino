@@ -11,7 +11,19 @@
 #include "syscall.h"
 #include "stm32f4_discovery.h"
 #include "stm32f4xx_conf.h" // again, added because ST didn't put it here ?
-#include "mruby.h"  
+#include "mruby.h"
+
+#ifndef USE_UART_STDOUT  
+  #include "usbd_usr.h"
+  #include "usbd_desc.h"
+  #include "usbd_cdc_vcp.h"
+  #ifdef USB_OTG_HS_INTERNAL_DMA_ENABLED
+    #if defined ( __ICCARM__ ) /*!< IAR Compiler */
+      #pragma data_alignment = 4   
+    #endif
+  #endif /* USB_OTG_HS_INTERNAL_DMA_ENABLED */
+  __ALIGN_BEGIN USB_OTG_CORE_HANDLE  USB_OTG_dev __ALIGN_END;
+#endif
 
 /* Private typedef -----------------------------------------------------------*/
 GPIO_InitTypeDef  GPIO_InitStructure;
@@ -20,14 +32,23 @@ GPIO_InitTypeDef  GPIO_InitStructure;
 
 #define USERBUTTON GPIOA, GPIO_Pin_0
 
+
+#define FLASH_PAGE_SIZE    ((uint16_t)0x400)
+#define RBBIN_START_ADDR  ((uint32_t)0x08040000)
+#define RRBIN_END_ADDR    ((uint32_t)0x08080000)
+
+
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
 /* Private function prototypes -----------------------------------------------*/
-
+  
 int write_handler(char c);
 void Delay(__IO uint32_t nCount);
 extern void rbmain(mrb_state *mrb);
 void initialize_basic_periph();
+
+uint8_t read_byte();
+uint32_t read_int();
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -56,10 +77,11 @@ int main(void)
   if (monitor_mode == Bit_SET) {
     puts("monitor mode");
     while (1) {
-      while (!USART_GetFlagStatus(USART2, USART_FLAG_RXNE));
-      uint16_t data = USART_ReceiveData(USART2);
+      uint8_t data = read_byte();
       if (data == 0xF1) {
         puts("OK");
+        uint32_t len = read_int();
+        printf("LEN:%u\n", (unsigned int)len);
       } else {
         puts("ERR");
       }
@@ -73,6 +95,7 @@ int main(void)
       Delay(0xFFFFFF);
       GPIO_ResetBits(GPIOD, GPIO_Pin_12|GPIO_Pin_13|GPIO_Pin_14|GPIO_Pin_15);
       Delay(0xFFFFFF);
+
       /*  
           mrb_state* mrb = mrb_open();
           rbmain(mrb);
@@ -82,6 +105,15 @@ int main(void)
   }
     
 
+}
+
+void transfer_ruby_binary(uint32_t length) {
+  FLASH_Unlock();
+  FLASH_ClearFlag(FLASH_FLAG_EOP|FLASH_FLAG_PGAERR |FLASH_FLAG_WRPERR);
+
+  for (int i = 0; i < length; i++) {
+    uint8_t data = read_byte();
+  }
 }
 
 /**
@@ -128,6 +160,14 @@ void assert_failed(uint8_t* file, uint32_t line)
 void
 initialize_basic_periph (void)
 {
+
+#ifndef USE_UART_STDOUT  
+  USBD_Init(&USB_OTG_dev,     
+            USB_OTG_FS_CORE_ID, 
+            &USR_desc, 
+            &USBD_CDC_cb, 
+            &USR_cb);
+#else
   /* STDOUT & STDERR */
 
   //GPIOAとUSART2にクロック供給
@@ -170,11 +210,11 @@ initialize_basic_periph (void)
 
   //USART2を有効化
   USART_Cmd(USART2, ENABLE);
+#endif
 
   SYSCALL_Init_STDOUT_Handler(&write_handler);
   SYSCALL_Init_STDERR_Handler(&write_handler);
   //SYSCALL_Init_STDIN_Handler(SYSREADHANDLER handler);
-
   /* USERBUTTON */
 
   //USERBUTTON(GPIOAのPIN0の設定)
@@ -187,13 +227,30 @@ initialize_basic_periph (void)
 
 }
 
+uint8_t read_byte() {
+  while (!USART_GetFlagStatus(USART2, USART_FLAG_RXNE));
+  return (uint8_t)(USART_ReceiveData(USART2) & 0x0FF);
+}
 
+uint32_t read_int() {
+  uint32_t result = 0;
+  for (int i = 0; i < 4; i++) {
+    uint8_t data = read_byte();
+    result = (result << 8) | data;
+  }
+  return result;
+}
 
 int
 write_handler(char c) {
+#ifdef USE_UART_STDOUT
   while (!(USART2->SR & USART_FLAG_TXE)); // check that USART is ready
   USART_SendData(USART2, c);
   return 1;
+#else
+  VCP_put_char(c);
+  return 1;  
+#endif
 }
 
 

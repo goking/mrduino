@@ -1,10 +1,10 @@
 /**
   ******************************************************************************
-  * @file    GPIO/IOToggle/stm32f4xx_it.h 
+  * @file    usbd_cdc_if_template.h
   * @author  MCD Application Team
   * @version V1.0.0
-  * @date    19-September-2011
-  * @brief   This file contains the headers of the interrupt handlers.
+  * @date    22-July-2011
+  * @brief   Header for dfu_mal.c file.
   ******************************************************************************
   * @attention
   *
@@ -17,39 +17,41 @@
   *
   * <h2><center>&copy; COPYRIGHT 2011 STMicroelectronics</center></h2>
   ******************************************************************************
-  */ 
+  */
 
 /* Define to prevent recursive inclusion -------------------------------------*/
-#ifndef __STM32F4xx_IT_H
-#define __STM32F4xx_IT_H
-
-#ifdef __cplusplus
- extern "C" {
-#endif 
+#ifndef __USBD_CDC_VCP_H
+#define __USBD_CDC_VCP_H
 
 /* Includes ------------------------------------------------------------------*/
-#include "stm32f4xx.h"
-#include "stm32f4xx_conf.h"
+#ifdef STM32F2XX
+ #include "stm32f2xx.h"
+#elif defined(STM32F10X_CL)
+ #include "stm32f10x.h"
+#endif /* STM32F2XX */
+
+#include "usbd_conf.h"
+#include "usbd_cdc_core.h"
 
 /* Exported types ------------------------------------------------------------*/
+typedef struct
+{
+  uint32_t bitrate;
+  uint8_t  format;
+  uint8_t  paritytype;
+  uint8_t  datatype;
+} LINE_CODING;
+
 /* Exported constants --------------------------------------------------------*/
+
+extern CDC_IF_Prop_TypeDef  VCP_fops;
+
 /* Exported macro ------------------------------------------------------------*/
 /* Exported functions ------------------------------------------------------- */
+void VCP_put_char(uint8_t buf);
+uint8_t VCP_get_char(uint8_t *buf);
 
-void NMI_Handler(void);
-void HardFault_Handler(void);
-void MemManage_Handler(void);
-void BusFault_Handler(void);
-void UsageFault_Handler(void);
-void SVC_Handler(void);
-void DebugMon_Handler(void);
-void PendSV_Handler(void);
-void SysTick_Handler(void);
 
-#ifdef __cplusplus
-}
-#endif
-
-#endif /* __STM32F4xx_IT_H */
+#endif /* __USBD_CDC_VCP_H */
 
 /******************* (C) COPYRIGHT 2011 STMicroelectronics *****END OF FILE****/

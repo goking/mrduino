@@ -1,7 +1,7 @@
 # put your *.o targets here, make should handle the rest!
 
 RBSRCS = rbmain.rb
-SRCS = main.c system_stm32f4xx.c syscalls.c $(RBSRCS:.rb=.c)
+SRCS = main.c stm32f4xx_it.c system_stm32f4xx.c syscalls.c $(RBSRCS:.rb=.c)
 
 # all the files will be generated with this name (main.elf, main.bin, main.hex, etc)
 
@@ -33,9 +33,10 @@ vpath %.rb src
 ROOT=$(shell pwd)
 
 CFLAGS += -Iinc -Ilib -Ilib/inc
-CFLAGS += -Ilib/inc/core -Ilib/inc/peripherals 
+CFLAGS += -Ilib/inc/core -Ilib/inc/peripherals -Ilib/inc/usb
 CFLAGS += -I$(MRB_INC_PATH)
-CFLAGS += -std=c99
+CFLAGS += -std=c99 -g
+CFLAGS += -D USE_USB_OTG_FS=1
 #CFLAGS += -specs=rdpmon.specs 
 
 LIBS = -L$(MRB_LIB_PATH) -lmruby
