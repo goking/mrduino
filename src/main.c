@@ -42,17 +42,21 @@ extern const char mrbmain_irep[];
 #define RRBIN_END_ADDR    ((uint32_t)0x08080000)
 
 
+#define BIN_BUFFER_SIZE 256
+
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
 /* Private function prototypes -----------------------------------------------*/
   
 int write_handler(char c);
+int read_handler();
 void Delay(__IO uint32_t nCount);
 extern void rbmain(mrb_state *mrb);
 void initialize_basic_periph();
 
-uint8_t read_byte();
-uint32_t read_int();
+//uint8_t read_byte();
+uint32_t read_uint32();
+uint32_t read_bytes(uint8_t *buf, uint32_t len);
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -80,14 +84,31 @@ int main(void)
 
   if (monitor_mode == Bit_SET) {
     puts("monitor mode");
+    GPIO_SetBits(GPIOD, GPIO_Pin_13|GPIO_Pin_15);
     while (1) {
-      uint8_t data = read_byte();
-      if (data == 0xF1) {
-        puts("OK");
-        uint32_t len = read_int();
-        printf("LEN:%u\n", (unsigned int)len);
-      } else {
-        puts("ERR");
+      int cmd = getchar();
+      if (cmd == 0xF1) { // Write mrb byte code to Flash ROM
+        puts("BEGIN:WBF");
+        GPIO_SetBits(GPIOD, GPIO_Pin_12);
+        uint32_t len = read_uint32();
+        if (len == 0) {
+          puts("ERR:SIZE");
+          continue;
+        }
+        GPIO_SetBits(GPIOD, GPIO_Pin_14);
+        printf("OK:SIZE=%u\n", (unsigned int)len);
+        uint8_t buf[BIN_BUFFER_SIZE];
+        uint32_t total = 0;
+        for (uint32_t i = 0; i < 0xFFFF && total < len; i++) {
+          uint32_t remain = len - total;
+          total += read_bytes(buf, remain > BIN_BUFFER_SIZE ? BIN_BUFFER_SIZE : remain);
+        }
+        if (total == len) {
+          puts("END:WBF");
+        } else {
+          puts("ERR:WBF");
+          GPIO_ResetBits(GPIOD, GPIO_Pin_12|GPIO_Pin_14);
+        }
       }
     }
   } else {
@@ -220,7 +241,7 @@ initialize_basic_periph (void)
 
   SYSCALL_Init_STDOUT_Handler(&write_handler);
   SYSCALL_Init_STDERR_Handler(&write_handler);
-  //SYSCALL_Init_STDIN_Handler(SYSREADHANDLER handler);
+  SYSCALL_Init_STDIN_Handler(&read_handler);
   /* USERBUTTON */
 
   //USERBUTTON(GPIOAのPIN0の設定)
@@ -233,18 +254,49 @@ initialize_basic_periph (void)
 
 }
 
+/*
 uint8_t read_byte() {
-  while (!USART_GetFlagStatus(USART2, USART_FLAG_RXNE));
-  return (uint8_t)(USART_ReceiveData(USART2) & 0x0FF);
 }
+*/
 
-uint32_t read_int() {
+#define MAX_READ_RETRY 0xFFFFFF
+#define UINT32_BYTES 4
+
+uint32_t
+read_uint32() {
   uint32_t result = 0;
-  for (int i = 0; i < 4; i++) {
-    uint8_t data = read_byte();
-    result = (result << 8) | data;
+  uint8_t data[UINT32_BYTES];
+  uint32_t bytes = read_bytes(data, UINT32_BYTES);
+  if (bytes == UINT32_BYTES) {
+    for (uint32_t i = 0; i < UINT32_BYTES; i++) {
+      result = (result << 8) | data[i];    
+    }
   }
   return result;
+}
+
+uint32_t
+read_bytes(uint8_t *buf, uint32_t len) {
+  uint32_t c = 0;
+  for (uint32_t i = 0; i < MAX_READ_RETRY && c < len; i++) {
+    int data = getchar();
+    if (data < 0) continue;
+    buf[c++] = (uint8_t)data & 0x0FF;
+    i = 0;
+  }
+  return c; 
+}
+
+int
+read_handler() {
+#ifdef USE_UART_STDIO
+  while (!USART_GetFlagStatus(USART2, USART_FLAG_RXNE));
+  return (int)(USART_ReceiveData(USART2) & 0x0FF);  
+#else
+  uint8_t buf;
+  uint8_t len = VCP_get_char(&buf);
+  return len > 0 ? (int)buf : -1;
+#endif
 }
 
 int
