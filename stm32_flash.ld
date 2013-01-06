@@ -38,15 +38,16 @@ MEMORY
 {
   FLASH (rx)      : ORIGIN = 0x08000000, LENGTH = 1024K
   CCRAM (xrw)     : ORIGIN = 0x10000000, LENGTH = 64K
-  RAM (xrw)       : ORIGIN = 0x20000000, LENGTH = 128K
+  RAM1 (xrw)      : ORIGIN = 0x20000000, LENGTH = 128K
+  /* RAM2 (xrw)      : ORIGIN = 0x2001C000, LENGTH = 16K */
   MEMORY_B1 (rx)  : ORIGIN = 0x60000000, LENGTH = 0K
 }
 
 /* Highest address of the user mode stack */
-_estack = 0x1000FFFF;    /* end of CCRAM */
+_estack = ORIGIN(CCRAM)+LENGTH(CCRAM);    /* end of CCRAM */
 
 /* Highest address of the user mode heap */
-_heap_limit = 0x2001FFFB;    /* end of 128K RAM on AHB bus*/
+_heap_limit = ORIGIN(RAM1)+LENGTH(RAM1)-4;    /* end of 112K RAM on AHB bus*/
 
 /* Define output sections */
 SECTIONS
@@ -121,7 +122,7 @@ SECTIONS
 
     . = ALIGN(4);
     _edata = .;        /* define a global symbol at data end */
-  } >RAM
+  } >CCRAM
 
   /* Uninitialized data section */
   . = ALIGN(4);
@@ -137,7 +138,7 @@ SECTIONS
     . = ALIGN(4);
     _ebss = .;         /* define a global symbol at bss end */
     __bss_end__ = _ebss;
-  } >RAM
+  } >CCRAM
 
   /* User_heap_stack section, used to check that there is enough RAM left */
   ._user_heap_stack :
@@ -145,7 +146,7 @@ SECTIONS
     . = ALIGN(4);
     PROVIDE ( end = . );
     PROVIDE ( _end = . );
-  } >RAM
+  } >RAM1
 
   /* MEMORY_bank1 section, code must be located here explicitly            */
   /* Example: extern int foo(void) __attribute__ ((section (".mb1text"))); */
