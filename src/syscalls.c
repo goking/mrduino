@@ -91,14 +91,14 @@ _read (int fd,
     errno = EBADF;
     return -1;
   }
+  int size = -1;
   for (int i = 0; i < len; i++) {
-    int res = _stdin_handler(ptr[i]);
-    if (res == -1) {
-      return i;
-    }
+    int res = _stdin_handler();
+    if (res == -1) break;
     ptr[i] = (char)res;
+    size = i + 1;
   }
-  return len;
+  return size;
 }
 
 /* fd, is a user file descriptor. */

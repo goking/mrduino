@@ -11,13 +11,13 @@ PROJ_NAME=main
 
 ###################################################
 
-MRBC=mrbc
+MRBC=$(MRB_HOME)/build/host/bin/mrbc
 CC=arm-none-eabi-gcc
 OBJCOPY=arm-none-eabi-objcopy
 
 LIBRARY_PATH = `which $(CC)`
 
-MRB_LIB_PATH = $(MRB_HOME)/build/stm32f4x/mrblib
+MRB_LIB_PATH = $(MRB_HOME)/build/arm-cortex-m4/lib
 MRB_INC_PATH = $(MRB_HOME)/include
 
 CFLAGS  = -g -O2 -Wall -Tstm32_flash.ld 
@@ -35,7 +35,7 @@ ROOT=$(shell pwd)
 CFLAGS += -Iinc -Ilib -Ilib/inc
 CFLAGS += -Ilib/inc/core -Ilib/inc/peripherals -Ilib/inc/usb
 CFLAGS += -I$(MRB_INC_PATH)
-CFLAGS += -std=c99 -g
+CFLAGS += -std=c99
 CFLAGS += -D USE_USB_OTG_FS=1
 #CFLAGS += -specs=rdpmon.specs 
 
@@ -58,7 +58,7 @@ lib:
 proj: 	$(PROJ_NAME).elf
 
 %.c: %.rb
-	$(MRBC) -Crbmain $^ -o$@
+	$(MRBC) -Bmrbmain_irep $^ -o$@
 
 $(PROJ_NAME).elf: $(SRCS)
 	$(CC) $(CFLAGS) $^ -o $@ $(LIBS)
@@ -67,7 +67,8 @@ $(PROJ_NAME).elf: $(SRCS)
 
 clean:
 	rm -f *.o
-	rm -f src/$(RBSRCS:.rb=.c)
+	rm -f $(RBSRCS:.rb=.c)
 	rm -f $(PROJ_NAME).elf
 	rm -f $(PROJ_NAME).hex
 	rm -f $(PROJ_NAME).bin
+	$(MAKE) -C lib clean

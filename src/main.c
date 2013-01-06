@@ -12,8 +12,10 @@
 #include "stm32f4_discovery.h"
 #include "stm32f4xx_conf.h" // again, added because ST didn't put it here ?
 #include "mruby.h"
+#include "mruby/dump.h"
+#include "mruby/proc.h"
 
-#ifndef USE_UART_STDOUT  
+#ifndef USE_UART_STDIO
   #include "usbd_usr.h"
   #include "usbd_desc.h"
   #include "usbd_cdc_vcp.h"
@@ -27,6 +29,8 @@
 
 /* Private typedef -----------------------------------------------------------*/
 GPIO_InitTypeDef  GPIO_InitStructure;
+
+extern const char mrbmain_irep[];
 
 /* Private define ------------------------------------------------------------*/
 
@@ -88,25 +92,25 @@ int main(void)
     }
   } else {
     puts("execute mode");
+    GPIO_SetBits(GPIOD, GPIO_Pin_12);
     while (1) {
+      mrb_state* mrb = mrb_open();
+      int n = mrb_read_irep(mrb, mrbmain_irep);
+      GPIO_SetBits(GPIOD, GPIO_Pin_13);
+      mrb_run(mrb, mrb_proc_new(mrb, mrb->irep[n]), mrb_top_self(mrb));
+//      rbmain(mrb);
       GPIO_SetBits(GPIOD, GPIO_Pin_14);
-      Delay(0xFFFFFF);          
+      mrb_close(mrb);
+//      Delay(0xFFFFFF);          
+//      Delay(0xFFFFFF);  
       GPIO_SetBits(GPIOD, GPIO_Pin_15);
       Delay(0xFFFFFF);
-      GPIO_ResetBits(GPIOD, GPIO_Pin_12|GPIO_Pin_13|GPIO_Pin_14|GPIO_Pin_15);
-      Delay(0xFFFFFF);
-
-      /*  
-          mrb_state* mrb = mrb_open();
-          rbmain(mrb);
-          mrb_close(mrb);
-      */  
+      GPIO_ResetBits(GPIOD, GPIO_Pin_13|GPIO_Pin_14|GPIO_Pin_15);
     }
   }
-    
-
 }
 
+/*
 void transfer_ruby_binary(uint32_t length) {
   FLASH_Unlock();
   FLASH_ClearFlag(FLASH_FLAG_EOP|FLASH_FLAG_PGAERR |FLASH_FLAG_WRPERR);
@@ -115,6 +119,7 @@ void transfer_ruby_binary(uint32_t length) {
     uint8_t data = read_byte();
   }
 }
+*/
 
 /**
   * @brief  Delay Function.
@@ -161,12 +166,13 @@ void
 initialize_basic_periph (void)
 {
 
-#ifndef USE_UART_STDOUT  
+#ifndef USE_UART_STDIO
   USBD_Init(&USB_OTG_dev,     
             USB_OTG_FS_CORE_ID, 
             &USR_desc, 
             &USBD_CDC_cb, 
             &USR_cb);
+
 #else
   /* STDOUT & STDERR */
 
@@ -243,7 +249,7 @@ uint32_t read_int() {
 
 int
 write_handler(char c) {
-#ifdef USE_UART_STDOUT
+#ifdef USE_UART_STDIO
   while (!(USART2->SR & USART_FLAG_TXE)); // check that USART is ready
   USART_SendData(USART2, c);
   return 1;
