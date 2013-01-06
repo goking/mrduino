@@ -209,7 +209,7 @@ static uint16_t VCP_DataRx (uint8_t* Buf, uint32_t Len)
 {  
   /* Send the received buffer */
   for (uint32_t i = 0; i < Len; i++) {
-    APP_Tx_Buffer[APP_tx_ptr_head] = *(Buf + i);
+    APP_Tx_Buffer[APP_tx_ptr_head++] = *(Buf + i);
     if (APP_tx_ptr_head == APP_TX_BUF_SIZE) {
       APP_tx_ptr_head = 0;
     }
