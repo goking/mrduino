@@ -42,7 +42,8 @@ extern const char mrbmain_irep[];
 #define RRBIN_END_ADDR    ((uint32_t)0x08080000)
 
 
-#define BIN_BUFFER_SIZE 256
+#define BIN_BUFFER_SIZE ((unsigned int)256)
+
 
 /* Private macro -------------------------------------------------------------*/
 /* Private variables ---------------------------------------------------------*/
@@ -57,6 +58,16 @@ void initialize_basic_periph();
 //uint8_t read_byte();
 uint32_t read_uint32();
 uint32_t read_bytes(uint8_t *buf, uint32_t len);
+uint16_t addr2sector(uint8_t* addr);
+
+#define FLASH_SECTOR_SIZE ((uint8_t)12)
+#define FLASH_Sector_Unknown ((uint16_t)0x0FFF)
+
+uint32_t flash_sector_base_addrs[] = {
+  0x08000000, 0x08004000, 0x08008000, 0x0800C000, 
+  0x08010000, 0x08020000, 0x08040000, 0x08060000,
+  0x08080000, 0x080A0000, 0x080C0000, 0x080E0000
+};
 
 /* Private functions ---------------------------------------------------------*/
 
@@ -67,8 +78,14 @@ uint32_t read_bytes(uint8_t *buf, uint32_t len);
   */
 int main(void)
 {
+  extern uint8_t _mrb_bin_base __asm__ ("_mrb_bin_base"); /* Defined by the linker.  */
+  extern uint8_t _mrb_bin_limit __asm__ ("_mrb_bin_limit");
+  uint8_t* mrb_bin_base = &_mrb_bin_base;
+  uint8_t* mrb_bin_limit = &_mrb_bin_limit;
+  uint32_t mrb_bin_size = mrb_bin_limit - mrb_bin_base;
+
   initialize_basic_periph();
-  
+
   uint8_t monitor_mode = GPIO_ReadInputDataBit(USERBUTTON);
 
   /* GPIOD Periph clock enable */
@@ -82,6 +99,8 @@ int main(void)
   GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
   GPIO_Init(GPIOD, &GPIO_InitStructure);
 
+  Delay(0xFFFFFF); // wait for initialize usb_vcp
+
   if (monitor_mode == Bit_SET) {
     puts("monitor mode");
     GPIO_SetBits(GPIOD, GPIO_Pin_13|GPIO_Pin_15);
@@ -90,25 +109,51 @@ int main(void)
       if (cmd == 0xF1) { // Write mrb byte code to Flash ROM
         puts("BEGIN:WBF");
         GPIO_SetBits(GPIOD, GPIO_Pin_12);
-        uint32_t len = read_uint32();
-        if (len == 0) {
-          puts("ERR:SIZE");
+        uint32_t size = read_uint32();
+        if (size == 0) {
+          puts("ERR:WRONG_SIZE");
+          continue;
+        } else if (size > mrb_bin_size) {
+          puts("ERR:SIZE_TOO_BIG");
           continue;
         }
         GPIO_SetBits(GPIOD, GPIO_Pin_14);
-        printf("OK:SIZE=%u\n", (unsigned int)len);
+
+        FLASH_Status flstat;
+        FLASH_Unlock();
+        uint16_t sc = addr2sector(mrb_bin_base);
+        if (sc == FLASH_Sector_Unknown) {
+          puts("ERR:WRONG_SECTOR");
+          continue;
+        }
+        while (sc <= FLASH_Sector_11) {
+          FLASH_EraseSector(sc, VoltageRange_3);
+          sc += FLASH_Sector_1;
+        }
         uint8_t buf[BIN_BUFFER_SIZE];
         uint32_t total = 0;
-        for (uint32_t i = 0; i < 0xFFFF && total < len; i++) {
-          uint32_t remain = len - total;
-          total += read_bytes(buf, remain > BIN_BUFFER_SIZE ? BIN_BUFFER_SIZE : remain);
+        uint8_t* addr = mrb_bin_base;
+        for (uint32_t i = 0; i < 0xFFFF && total < size; i++) {
+          uint32_t remain = size - total;
+          printf("OK:SIZE=%u,BUF=%u\n", (unsigned int)remain, BIN_BUFFER_SIZE);
+          uint32_t len = read_bytes(buf, remain > BIN_BUFFER_SIZE ? BIN_BUFFER_SIZE : remain);
+          for (uint32_t j = 0; j < len; j++) {
+            flstat = FLASH_ProgramByte((uint32_t)addr++, buf[j]);
+            if (flstat != FLASH_COMPLETE) {
+              puts("ERR:FLASH_WRITE");
+              goto EXIT;
+            }
+          }
+          total += len;
         }
-        if (total == len) {
+        if (total == size) {
           puts("END:WBF");
         } else {
           puts("ERR:WBF");
           GPIO_ResetBits(GPIOD, GPIO_Pin_12|GPIO_Pin_14);
         }
+        EXIT:
+        FLASH_Lock();
       }
     }
   } else {
@@ -116,7 +161,15 @@ int main(void)
     GPIO_SetBits(GPIOD, GPIO_Pin_12);
     while (1) {
       mrb_state* mrb = mrb_open();
-      int n = mrb_read_irep(mrb, mrbmain_irep);
+      int n = mrb_read_irep(mrb, (const char *)mrb_bin_base);
+      if (n < 0) {
+        while (1) {
+          GPIO_SetBits(GPIOD, GPIO_Pin_13|GPIO_Pin_14|GPIO_Pin_15);
+          Delay(0x0FFFFF);
+          GPIO_ResetBits(GPIOD, GPIO_Pin_13|GPIO_Pin_14|GPIO_Pin_15);
+          Delay(0x0FFFFF);
+        }
+      }
       GPIO_SetBits(GPIOD, GPIO_Pin_13);
       mrb_run(mrb, mrb_proc_new(mrb, mrb->irep[n]), mrb_top_self(mrb));
 //      rbmain(mrb);
@@ -186,19 +239,28 @@ void assert_failed(uint8_t* file, uint32_t line)
 void
 initialize_basic_periph (void)
 {
-
 #ifndef USE_UART_STDIO
   USBD_Init(&USB_OTG_dev,     
             USB_OTG_FS_CORE_ID, 
             &USR_desc, 
             &USBD_CDC_cb, 
             &USR_cb);
+#endif
 
-#else
+  RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
+
+  //USERBUTTON(GPIOAのPIN0の設定)
+  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0; /* USERBUTTON */
+  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
+  GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_DOWN;
+  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
+  GPIO_Init(GPIOA, &GPIO_InitStructure);
+
+#ifdef USE_UART_STDIO
   /* STDOUT & STDERR */
 
   //GPIOAとUSART2にクロック供給
-  RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
   RCC_APB1PeriphClockCmd(RCC_APB1Periph_USART2, ENABLE);
 
   //GPIOAのPIN2を出力に設定
@@ -242,15 +304,6 @@ initialize_basic_periph (void)
   SYSCALL_Init_STDOUT_Handler(&write_handler);
   SYSCALL_Init_STDERR_Handler(&write_handler);
   SYSCALL_Init_STDIN_Handler(&read_handler);
-  /* USERBUTTON */
-
-  //USERBUTTON(GPIOAのPIN0の設定)
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN;
-  GPIO_InitStructure.GPIO_OType = GPIO_OType_PP;
-  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_DOWN;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_100MHz;
-  GPIO_Init(GPIOA, &GPIO_InitStructure);
 
 }
 
@@ -258,6 +311,16 @@ initialize_basic_periph (void)
 uint8_t read_byte() {
 }
 */
+
+uint16_t
+addr2sector(uint8_t* addr) {
+  for (uint8_t i = 0; i < FLASH_SECTOR_SIZE; i++) {
+    if (addr == (uint8_t*)flash_sector_base_addrs[i]) {
+      return FLASH_Sector_1 * i;
+    }  
+  }
+  return FLASH_Sector_Unknown;
+}
 
 #define MAX_READ_RETRY 0xFFFFFF
 #define UINT32_BYTES 4

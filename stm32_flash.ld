@@ -36,7 +36,8 @@ ENTRY(Reset_Handler)
 /* Specify the memory areas */
 MEMORY
 {
-  FLASH (rx)      : ORIGIN = 0x08000000, LENGTH = 1024K
+  FLASH (rx)      : ORIGIN = 0x08000000, LENGTH = 512K /* Flash Sector 0-7 */
+  MRB_BIN (rx)    : ORIGIN = 0x08080000, LENGTH = 512K /* Flash Sector 8-11 */
   CCRAM (xrw)     : ORIGIN = 0x10000000, LENGTH = 64K
   RAM1 (xrw)      : ORIGIN = 0x20000000, LENGTH = 128K
   /* RAM2 (xrw)      : ORIGIN = 0x2001C000, LENGTH = 16K */
@@ -48,6 +49,9 @@ _estack = ORIGIN(CCRAM)+LENGTH(CCRAM);    /* end of CCRAM */
 
 /* Highest address of the user mode heap */
 _heap_limit = ORIGIN(RAM1)+LENGTH(RAM1)-4;    /* end of 112K RAM on AHB bus*/
+
+_mrb_bin_base = ORIGIN(MRB_BIN);
+_mrb_bin_limit = ORIGIN(MRB_BIN)+LENGTH(MRB_BIN);
 
 /* Define output sections */
 SECTIONS
