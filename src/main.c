@@ -14,6 +14,7 @@
 #include "mruby.h"
 #include "mruby/dump.h"
 #include "mruby/proc.h"
+#include "mrduino.h"
 
 #ifndef USE_UART_STDIO
   #include "usbd_usr.h"

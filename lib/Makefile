@@ -10,6 +10,7 @@ CFLAGS += -mlittle-endian -mthumb -mcpu=cortex-m4 -mthumb-interwork
 CFLAGS += -mfloat-abi=hard -mfpu=fpv4-sp-d16
 CFLAGS += -ffreestanding -nostdlib
 CFLAGS += -Iinc -Iinc/core -Iinc/peripherals -Iinc/usb
+CFLAGS += -I../inc
 CFLAGS += -D USE_USB_OTG_FS=1
 
 #SRCS  = stm32f4_discovery.c
