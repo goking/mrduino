@@ -162,8 +162,9 @@ int main(void)
     GPIO_SetBits(GPIOD, GPIO_Pin_12);
     while (1) {
       mrb_state* mrb = mrb_open();
-      int n = mrb_read_irep(mrb, (const char *)mrb_bin_base);
-      if (n < 0) {
+      init_mrduino(mrb);
+      mrb_irep* irep = mrb_read_irep(mrb, mrb_bin_base);
+      if (irep == NULL) {
         while (1) {
           GPIO_SetBits(GPIOD, GPIO_Pin_13|GPIO_Pin_14|GPIO_Pin_15);
           Delay(0x0FFFFF);
@@ -172,7 +173,7 @@ int main(void)
         }
       }
       GPIO_SetBits(GPIOD, GPIO_Pin_13);
-      mrb_run(mrb, mrb_proc_new(mrb, mrb->irep[n]), mrb_top_self(mrb));
+      mrb_run(mrb, mrb_proc_new(mrb, irep), mrb_top_self(mrb));
 //      rbmain(mrb);
       GPIO_SetBits(GPIOD, GPIO_Pin_14);
       mrb_close(mrb);
