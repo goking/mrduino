@@ -6,7 +6,11 @@ end
 
 load 'submodules/mruby/Rakefile'
 
+MRBC = File.expand_path('submodules/mruby/build/host/bin/mrbc')
 LIBMRUBY = File.expand_path('submodules/mruby/build/arm-cortex-m4/lib/libmruby.a')
 
 desc 'build libmruby'
 task :libmruby => LIBMRUBY
+
+desc 'build mrbc'
+task :mrbc => MRBC
